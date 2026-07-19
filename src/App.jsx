@@ -282,6 +282,10 @@ export default function App() {
                     <div style={styles.cardName}>{h.name}</div>
                     {h.owner && <div style={styles.cardOwner}>{h.owner}</div>}
 
+                    <div style={{ ...styles.statusTag, background: s.bg, color: s.color }}>
+                      {s.label}
+                    </div>
+
                     {unlockedIds.has(h.id) ? (
                       <div style={styles.btnRow}>
                         {STATUS_ORDER.map((key) => {
@@ -491,6 +495,14 @@ const styles = {
   },
   cardName: { fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, marginBottom: 2 },
   cardOwner: { fontSize: 12, color: "#7A7568", marginBottom: 10 },
+  statusTag: {
+    display: "inline-block",
+    fontSize: 12,
+    fontWeight: 600,
+    padding: "4px 10px",
+    borderRadius: 999,
+    marginBottom: 12,
+  },
   btnRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 },
   statusBtn: {
     border: "1.5px solid",
