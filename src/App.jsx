@@ -100,19 +100,22 @@ export default function App() {
   }
 
   async function setStatus(id, status) {
-    const { error: err } = await supabase
-      .from("horses")
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq("id", id);
+    const updatedAt = new Date().toISOString();
+    setHorses((prev) => prev.map((h) => (h.id === id ? { ...h, status, updated_at: updatedAt } : h)));
+    const { error: err } = await supabase.from("horses").update({ status, updated_at: updatedAt }).eq("id", id);
     if (err) setError("Speichern fehlgeschlagen: " + err.message);
   }
 
   async function saveComment(id, text) {
+    setHorses((prev) => prev.map((h) => (h.id === id ? { ...h, comment: text } : h)));
     const { error: err } = await supabase.from("horses").update({ comment: text }).eq("id", id);
     if (err) setError("Speichern fehlgeschlagen: " + err.message);
   }
 
   async function moveHorse(id, paddockId, slotIndex) {
+    setHorses((prev) =>
+      prev.map((h) => (h.id === id ? { ...h, paddock_id: paddockId, slot_index: slotIndex } : h))
+    );
     const { error: err } = await supabase
       .from("horses")
       .update({ paddock_id: paddockId, slot_index: slotIndex })
@@ -121,6 +124,7 @@ export default function App() {
   }
 
   async function deleteHorse(id) {
+    setHorses((prev) => prev.filter((h) => h.id !== id));
     const { error: err } = await supabase.from("horses").delete().eq("id", id);
     if (err) setError("Entfernen fehlgeschlagen: " + err.message);
     setSelected(null);
@@ -724,7 +728,7 @@ const styles = {
   },
   paddockRow: { background: "#2E3D31", border: "1px solid #3E4F41", borderRadius: 10, padding: "8px 8px 6px" },
   paddockMeta: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6, paddingLeft: 2 },
-  paddockNumber: { fontSize: 11, fontWeight: 700, color: "#9CB09E" },
+  paddockNumber: { fontSize: 16, fontWeight: 800, color: "#EFE8D8" },
   seasonBadge: { fontSize: 9.5, fontWeight: 700, color: "#26332A", background: "#9CB09E", borderRadius: 4, padding: "1px 5px" },
   paddockNote: { fontSize: 10.5, color: "#D9A05B", marginTop: 6, paddingLeft: 2 },
   slotsWrap: { display: "flex", gap: 6, flexWrap: "wrap" },
