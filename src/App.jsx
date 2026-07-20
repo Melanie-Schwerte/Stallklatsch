@@ -17,9 +17,9 @@ function bucketOf(status) {
   return "halb";
 }
 const BUCKET = {
-  voll: { bg: "#DCEBD3", border: "#6B8F58", text: "#3E5A32", label: "Vollservice" },
-  halb: { bg: "#FBE6CF", border: "#C9762B", text: "#8A4E1C", label: "Halbservice" },
-  kein: { bg: "#E7E5DE", border: "#A9A492", text: "#6B675B", label: "Kein Service" },
+  voll: { bg: "#B7DFA3", border: "#4F7A3A", text: "#2C4620", label: "Vollservice" },
+  halb: { bg: "#F6C98A", border: "#B5651D", text: "#7A431D", label: "Halbservice" },
+  kein: { bg: "#D3CFC3", border: "#847E6E", text: "#4F4A3D", label: "Kein Service" },
 };
 
 export default function App() {
@@ -797,7 +797,8 @@ const styles = {
     padding: "2px 6px",
     background: "rgba(255,255,255,0.55)",
     borderRadius: 4,
-    color: "#4A4638",
+    color: "#B23B3B",
+    fontWeight: 600,
     display: "inline-block",
     wordBreak: "break-word",
   },
