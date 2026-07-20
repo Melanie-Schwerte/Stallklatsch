@@ -165,18 +165,33 @@ export default function App() {
     return `vor ${Math.round(hrs / 24)} Tg.`;
   }
 
-  // Rendert die Weiden in Papierplan-Reihenfolge, mit Abschnitts-Überschriften
+  // Gruppiert Weiden zeilenweise (links+rechts mit gleicher order_index),
+  // mit Abschnitts-Überschriften wo nötig
   const rows = [];
-  let lastSectionTitle = null;
-  paddocks.forEach((p) => {
-    if (p.section_title && p.section_title !== lastSectionTitle) {
-      rows.push({ type: "heading", key: "h-" + p.id, title: p.section_title });
-      lastSectionTitle = p.section_title;
-    } else if (!p.section_title) {
-      lastSectionTitle = null;
-    }
-    rows.push({ type: "paddock", key: p.id, paddock: p });
-  });
+  {
+    const byOrder = {};
+    paddocks.forEach((p) => {
+      if (!byOrder[p.order_index]) byOrder[p.order_index] = [];
+      byOrder[p.order_index].push(p);
+    });
+    const orderKeys = Object.keys(byOrder)
+      .map(Number)
+      .sort((a, b) => a - b);
+    let lastTitle = null;
+    orderKeys.forEach((ord) => {
+      const group = byOrder[ord];
+      const left = group.find((p) => p.column !== "right") || null;
+      const right = group.find((p) => p.column === "right") || null;
+      const title = (left && left.section_title) || (right && right.section_title) || null;
+      if (title && title !== lastTitle) {
+        rows.push({ type: "heading", key: "h-" + ord, title });
+        lastTitle = title;
+      } else if (!title) {
+        lastTitle = null;
+      }
+      rows.push({ type: "row", key: "row-" + ord, left, right });
+    });
+  }
 
   return (
     <div style={styles.page}>
@@ -270,22 +285,39 @@ export default function App() {
                 {row.title}
               </div>
             ) : (
-              <PaddockRow
-                key={row.key}
-                paddock={row.paddock}
-                horsesInSlot={horsesByPaddock[row.paddock.id] || {}}
-                filterBucket={filterBucket}
-                onCellClick={(slotIndex, horse) =>
-                  setSelected(horse ? { horseId: horse.id } : { newForPaddock: row.paddock.id, slot: slotIndex })
-                }
-              />
+              <div key={row.key} style={styles.rowWrap}>
+                {row.left ? (
+                  <PaddockBox
+                    paddock={row.left}
+                    horsesInSlot={horsesByPaddock[row.left.id] || {}}
+                    filterBucket={filterBucket}
+                    onCellClick={(slotIndex, horse) =>
+                      setSelected(horse ? { horseId: horse.id } : { newForPaddock: row.left.id, slot: slotIndex })
+                    }
+                  />
+                ) : (
+                  <div style={styles.spacerBox} />
+                )}
+                {row.right ? (
+                  <PaddockBox
+                    paddock={row.right}
+                    horsesInSlot={horsesByPaddock[row.right.id] || {}}
+                    filterBucket={filterBucket}
+                    onCellClick={(slotIndex, horse) =>
+                      setSelected(horse ? { horseId: horse.id } : { newForPaddock: row.right.id, slot: slotIndex })
+                    }
+                  />
+                ) : (
+                  <div style={styles.spacerBox} />
+                )}
+              </div>
             )
           )}
 
           {unassignedHorses.length > 0 && (
             <>
               <div style={styles.sectionHeading}>Nicht zugeordnet</div>
-              <div style={styles.paddockRow}>
+              <div style={styles.paddockBox}>
                 <div style={styles.slotsWrap}>
                   {unassignedHorses.map((h) => (
                     <HorseCell
@@ -329,10 +361,10 @@ export default function App() {
   );
 }
 
-function PaddockRow({ paddock, horsesInSlot, filterBucket, onCellClick }) {
+function PaddockBox({ paddock, horsesInSlot, filterBucket, onCellClick }) {
   const slots = Array.from({ length: paddock.slot_count }, (_, i) => horsesInSlot[i] || null);
   return (
-    <div style={styles.paddockRow}>
+    <div style={styles.paddockBox}>
       <div style={styles.paddockMeta}>
         <span style={styles.paddockNumber}>{paddock.number}</span>
         {paddock.season && (
@@ -558,6 +590,7 @@ function AdminPanel({ paddocks, adminPinValue, onReload, setError }) {
   const [newNumber, setNewNumber] = useState("");
   const [newSeason, setNewSeason] = useState("S");
   const [newSlots, setNewSlots] = useState(2);
+  const [newColumn, setNewColumn] = useState("left");
   const [newAdminPin, setNewAdminPin] = useState(adminPinValue || "");
 
   async function addPaddock() {
@@ -569,6 +602,7 @@ function AdminPanel({ paddocks, adminPinValue, onReload, setError }) {
       slot_count: Number(newSlots) || 2,
       order_index: maxOrder + 1,
       section: "main",
+      column: newColumn,
     });
     if (err) setError("Weide anlegen fehlgeschlagen: " + err.message);
     setNewNumber("");
@@ -612,6 +646,14 @@ function AdminPanel({ paddocks, adminPinValue, onReload, setError }) {
               <option value="S">S</option>
               <option value="W">W</option>
             </select>
+            <select
+              style={styles.adminMiniInput}
+              defaultValue={p.column || "left"}
+              onChange={(e) => updatePaddockField(p.id, "column", e.target.value)}
+            >
+              <option value="left">links</option>
+              <option value="right">rechts</option>
+            </select>
             <input
               style={{ ...styles.adminMiniInput, flex: 1 }}
               defaultValue={p.note || ""}
@@ -643,6 +685,10 @@ function AdminPanel({ paddocks, adminPinValue, onReload, setError }) {
           value={newSlots}
           onChange={(e) => setNewSlots(e.target.value)}
         />
+        <select style={styles.adminMiniInput} value={newColumn} onChange={(e) => setNewColumn(e.target.value)}>
+          <option value="left">links</option>
+          <option value="right">rechts</option>
+        </select>
         <button style={styles.modalSecondaryBtn} onClick={addPaddock}>
           + Weide
         </button>
@@ -717,7 +763,9 @@ const styles = {
     color: "#EFE8D8",
   },
   chipActive: { background: "#EFE8D8", color: "#26332A", borderColor: "#EFE8D8" },
-  list: { display: "flex", flexDirection: "column", gap: 8 },
+  list: { display: "flex", flexDirection: "column", gap: 10 },
+  rowWrap: { display: "flex", gap: 14, alignItems: "flex-start" },
+  spacerBox: { flex: 1, minWidth: 0 },
   sectionHeading: {
     fontFamily: "'Fraunces', serif",
     fontWeight: 600,
@@ -726,15 +774,14 @@ const styles = {
     marginTop: 14,
     marginBottom: 2,
   },
-  paddockRow: { background: "#2E3D31", border: "1px solid #3E4F41", borderRadius: 10, padding: "8px 8px 6px" },
+  paddockBox: { flex: 1, minWidth: 0, background: "#2E3D31", border: "1px solid #3E4F41", borderRadius: 10, padding: "8px 8px 6px" },
   paddockMeta: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6, paddingLeft: 2 },
   paddockNumber: { fontSize: 16, fontWeight: 800, color: "#EFE8D8" },
   seasonBadge: { fontSize: 9.5, fontWeight: 700, color: "#26332A", background: "#9CB09E", borderRadius: 4, padding: "1px 5px" },
   paddockNote: { fontSize: 10.5, color: "#D9A05B", marginTop: 6, paddingLeft: 2 },
-  slotsWrap: { display: "flex", gap: 6, flexWrap: "wrap" },
+  slotsWrap: { display: "flex", flexDirection: "column", gap: 6 },
   horseCell: {
-    flex: "1 1 130px",
-    minWidth: 130,
+    width: "100%",
     textAlign: "left",
     border: "1.5px solid",
     borderRadius: 8,
@@ -756,8 +803,7 @@ const styles = {
   },
   lockCorner: { position: "absolute", top: 6, right: 7, fontSize: 10, opacity: 0.55 },
   emptySlot: {
-    flex: "1 1 130px",
-    minWidth: 130,
+    width: "100%",
     border: "1.5px dashed #4A5D4D",
     borderRadius: 8,
     padding: "8px 9px",
