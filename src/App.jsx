@@ -368,13 +368,11 @@ function HorseCell({ horse, filterBucket, onClick }) {
         opacity: dimmed ? 0.35 : 1,
       }}
     >
+      <div style={styles.lockCorner}>🔒</div>
       <div style={styles.horseCellOwner}>{horse.owner}</div>
       <div style={{ ...styles.horseCellName, color: b.text }}>{horse.name}</div>
       {bucket === "halb" && <div style={styles.horseCellStatus}>{STATUS[horse.status].short}</div>}
-      <div style={styles.horseCellIcons}>
-        <span>🔒</span>
-        {horse.comment && <span title={horse.comment}>💬</span>}
-      </div>
+      {horse.comment && <div style={styles.horseCellComment}>{horse.comment}</div>}
     </button>
   );
 }
@@ -742,7 +740,17 @@ const styles = {
   horseCellOwner: { fontSize: 10, color: "#6B675B" },
   horseCellName: { fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 15.5, lineHeight: 1.2 },
   horseCellStatus: { fontSize: 10, fontWeight: 600, marginTop: 2, color: "#8A4E1C" },
-  horseCellIcons: { position: "absolute", top: 6, right: 7, fontSize: 10, display: "flex", gap: 4, opacity: 0.6 },
+  horseCellComment: {
+    fontSize: 10.5,
+    marginTop: 5,
+    padding: "2px 6px",
+    background: "rgba(255,255,255,0.55)",
+    borderRadius: 4,
+    color: "#4A4638",
+    display: "inline-block",
+    wordBreak: "break-word",
+  },
+  lockCorner: { position: "absolute", top: 6, right: 7, fontSize: 10, opacity: 0.55 },
   emptySlot: {
     flex: "1 1 130px",
     minWidth: 130,
