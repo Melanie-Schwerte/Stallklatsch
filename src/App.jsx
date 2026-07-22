@@ -114,6 +114,13 @@ export default function App() {
     if (err) setError("Speichern fehlgeschlagen: " + err.message);
   }
 
+  async function setFuehranlageActive(id, active) {
+    setHorses((prev) => prev.map((h) => (h.id === id ? { ...h, fuehranlage_active: active } : h)));
+    const { error: err } = await supabase.from("horses").update({ fuehranlage_active: active }).eq("id", id);
+    if (err) setError("Speichern fehlgeschlagen: " + err.message);
+    load();
+  }
+
   async function saveComment(id, text) {
     setHorses((prev) => prev.map((h) => (h.id === id ? { ...h, comment: text } : h)));
     const { error: err } = await supabase.from("horses").update({ comment: text }).eq("id", id);
@@ -381,6 +388,7 @@ export default function App() {
           onClose={() => setSelected(null)}
           onSetStatus={setStatus}
           onSetFuehranlage={setFuehranlageStatus}
+          onSetFuehranlageActive={setFuehranlageActive}
           onSaveComment={saveComment}
           onMoveHorse={moveHorse}
           onDeleteHorse={deleteHorse}
@@ -398,7 +406,8 @@ export default function App() {
 }
 
 function FuehranlageView({ horses, onCellClick, onSaveComment }) {
-  const sorted = [...horses].sort((a, b) => {
+  const activeHorses = horses.filter((h) => h.fuehranlage_active !== false);
+  const sorted = [...activeHorses].sort((a, b) => {
     const ao = a.fuehranlage_order ?? 9999;
     const bo = b.fuehranlage_order ?? 9999;
     if (ao !== bo) return ao - bo;
@@ -545,6 +554,7 @@ function DetailModal({
   onClose,
   onSetStatus,
   onSetFuehranlage,
+  onSetFuehranlageActive,
   onSaveComment,
   onMoveHorse,
   onDeleteHorse,
@@ -726,9 +736,21 @@ function DetailModal({
             placeholder="Platz für Kommentar, falls nötig"
           />
 
-          <button style={styles.deleteBtn} onClick={() => onDeleteHorse(horse.id)}>
-            Pferd entfernen
-          </button>
+          {mode === "fuehranlage" ? (
+            <button
+              style={styles.deleteBtn}
+              onClick={() => {
+                onSetFuehranlageActive(horse.id, false);
+                onClose();
+              }}
+            >
+              Aus Führanlagen-Liste entfernen
+            </button>
+          ) : (
+            <button style={styles.deleteBtn} onClick={() => onDeleteHorse(horse.id)}>
+              Pferd entfernen
+            </button>
+          )}
         </>
       )}
     </ModalShell>
@@ -764,30 +786,39 @@ function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError,
     onReload();
   }
 
-  const sortedForOrder = [...horses].sort((a, b) => {
+  const activeForOrder = horses.filter((h) => h.fuehranlage_active !== false);
+  const inactiveForOrder = horses.filter((h) => h.fuehranlage_active === false);
+
+  const sortedForOrder = [...activeForOrder].sort((a, b) => {
     const ao = a.fuehranlage_order ?? 9999;
     const bo = b.fuehranlage_order ?? 9999;
     if (ao !== bo) return ao - bo;
     return a.name.localeCompare(b.name, "de");
   });
 
-  async function updateHorseOrder(id, value) {
-    const num = value.trim() === "" ? null : Number(value);
-    const { error: err } = await supabase.from("horses").update({ fuehranlage_order: num }).eq("id", id);
-    if (err) setError("Speichern fehlgeschlagen: " + err.message);
+  // Verschiebt ein Pferd direkt an eine Zielposition; alle anderen rutschen
+  // automatisch sauber nach (statt nur Tausch mit dem Nachbarn).
+  async function moveToPosition(horseId, targetPosition) {
+    const moving = sortedForOrder.find((h) => h.id === horseId);
+    if (!moving) return;
+    const rest = sortedForOrder.filter((h) => h.id !== horseId);
+    let idx = Math.round(targetPosition) - 1;
+    idx = Math.max(0, Math.min(idx, rest.length));
+    rest.splice(idx, 0, moving);
+    const { error: err } = await (async () => {
+      for (let i = 0; i < rest.length; i++) {
+        const { error } = await supabase.from("horses").update({ fuehranlage_order: i + 1 }).eq("id", rest[i].id);
+        if (error) return { error };
+      }
+      return { error: null };
+    })();
+    if (err) setError("Verschieben fehlgeschlagen: " + err.message);
     onReload();
   }
 
-  async function swapOrder(index, direction) {
-    const otherIndex = index + direction;
-    if (otherIndex < 0 || otherIndex >= sortedForOrder.length) return;
-    const a = sortedForOrder[index];
-    const b = sortedForOrder[otherIndex];
-    const aOrder = a.fuehranlage_order ?? index + 1;
-    const bOrder = b.fuehranlage_order ?? otherIndex + 1;
-    const { error: err1 } = await supabase.from("horses").update({ fuehranlage_order: bOrder }).eq("id", a.id);
-    const { error: err2 } = await supabase.from("horses").update({ fuehranlage_order: aOrder }).eq("id", b.id);
-    if (err1 || err2) setError("Verschieben fehlgeschlagen: " + (err1?.message || err2?.message));
+  async function setFuehranlageActive(id, active) {
+    const { error: err } = await supabase.from("horses").update({ fuehranlage_active: active }).eq("id", id);
+    if (err) setError("Speichern fehlgeschlagen: " + err.message);
     onReload();
   }
 
@@ -845,7 +876,10 @@ function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError,
       <div style={styles.adminHint}>Gilt sofort für alle – bei Regen einfach umschalten.</div>
 
       <div style={styles.adminPanelTitle}>Führanlagen-Reihenfolge</div>
-      <div style={styles.adminHint}>Pfeile zum Umsortieren – nach jeweils 4 Pferden eine Trennlinie (= eine Runde).</div>
+      <div style={styles.adminHint}>
+        Zahl = Zielposition (Enter zum Bestätigen) – die Liste rutscht automatisch nach. Nach jeweils 4
+        Pferden eine Trennlinie (= eine Runde).
+      </div>
       <button style={{ ...styles.modalSecondaryBtn, marginBottom: 8 }} onClick={onAddNewHorse}>
         + Neues Pferd eintragen
       </button>
@@ -854,22 +888,29 @@ function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError,
           <div key={h.id}>
             <div style={styles.adminOrderRow}>
               <input
+                key={h.id + "-" + i}
                 style={styles.orderNumberInput}
                 type="number"
-                defaultValue={h.fuehranlage_order ?? i + 1}
-                onBlur={(e) => updateHorseOrder(h.id, e.target.value)}
+                defaultValue={i + 1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.target.blur();
+                }}
+                onBlur={(e) => {
+                  const val = Number(e.target.value);
+                  if (val && val !== i + 1) moveToPosition(h.id, val);
+                }}
               />
               <div style={styles.orderArrows}>
                 <button
                   style={{ ...styles.arrowBtnBig, opacity: i === 0 ? 0.35 : 1 }}
-                  onClick={() => swapOrder(i, -1)}
+                  onClick={() => moveToPosition(h.id, i)}
                   disabled={i === 0}
                 >
                   ▲
                 </button>
                 <button
                   style={{ ...styles.arrowBtnBig, opacity: i === sortedForOrder.length - 1 ? 0.35 : 1 }}
-                  onClick={() => swapOrder(i, 1)}
+                  onClick={() => moveToPosition(h.id, i + 2)}
                   disabled={i === sortedForOrder.length - 1}
                 >
                   ▼
@@ -878,11 +919,32 @@ function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError,
               <span style={styles.adminOrderLabel}>
                 {h.name} ({h.owner})
               </span>
+              <button style={styles.adminDeleteBtn} title="Aus Führanlagen-Liste entfernen" onClick={() => setFuehranlageActive(h.id, false)}>
+                ✕
+              </button>
             </div>
             {(i + 1) % 4 === 0 && i !== sortedForOrder.length - 1 && <div style={styles.orderDivider} />}
           </div>
         ))}
       </div>
+
+      {inactiveForOrder.length > 0 && (
+        <>
+          <div style={styles.adminPanelTitle}>Nicht in der Führanlagen-Liste</div>
+          <div style={styles.adminPaddockList}>
+            {inactiveForOrder.map((h) => (
+              <div key={h.id} style={styles.adminOrderRow}>
+                <span style={styles.adminOrderLabel}>
+                  {h.name} ({h.owner})
+                </span>
+                <button style={styles.modalSecondaryBtn} onClick={() => setFuehranlageActive(h.id, true)}>
+                  + Wieder aufnehmen
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <div style={styles.adminPanelTitle}>Weiden verwalten</div>
       <div style={styles.adminPaddockList}>
