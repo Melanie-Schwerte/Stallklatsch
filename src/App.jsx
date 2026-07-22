@@ -39,6 +39,7 @@ export default function App() {
   const [filterBucket, setFilterBucket] = useState(null);
   const [selected, setSelected] = useState(null); // { horseId } oder { newForPaddock, slot }
   const [unlockedIds, setUnlockedIds] = useState(() => new Set());
+  const [mode, setMode] = useState("weide"); // 'weide' | 'fuehranlage'
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,6 +54,7 @@ export default function App() {
       setPaddocks(p || []);
       setHorses(h || []);
       setAdminPinValue(s?.admin_pin || null);
+      setMode(s?.mode || "weide");
       setError(null);
     }
     setLoading(false);
@@ -103,6 +105,12 @@ export default function App() {
     const updatedAt = new Date().toISOString();
     setHorses((prev) => prev.map((h) => (h.id === id ? { ...h, status, updated_at: updatedAt } : h)));
     const { error: err } = await supabase.from("horses").update({ status, updated_at: updatedAt }).eq("id", id);
+    if (err) setError("Speichern fehlgeschlagen: " + err.message);
+  }
+
+  async function setFuehranlageStatus(id, val) {
+    setHorses((prev) => prev.map((h) => (h.id === id ? { ...h, fuehranlage_status: val } : h)));
+    const { error: err } = await supabase.from("horses").update({ fuehranlage_status: val }).eq("id", id);
     if (err) setError("Speichern fehlgeschlagen: " + err.message);
   }
 
@@ -248,7 +256,7 @@ export default function App() {
       {error && <div style={styles.errorBanner}>{error}</div>}
       {loading && <div style={styles.empty}>Weideplan wird geladen …</div>}
 
-      {!loading && (
+      {!loading && mode === "weide" && (
         <div style={styles.filterBar}>
           <button
             onClick={() => setFilterBucket(null)}
@@ -273,11 +281,23 @@ export default function App() {
         </div>
       )}
 
-      {adminUnlocked && showAdminPanel && (
-        <AdminPanel paddocks={paddocks} adminPinValue={adminPinValue} onReload={load} setError={setError} />
+      {mode === "fuehranlage" && !loading && (
+        <div style={styles.modeBanner}>🌀 Führanlagenbetrieb aktiv – Weide-Status bleibt im Hintergrund erhalten</div>
       )}
 
-      {!loading && (
+      {adminUnlocked && showAdminPanel && (
+        <AdminPanel
+          paddocks={paddocks}
+          horses={horses}
+          adminPinValue={adminPinValue}
+          mode={mode}
+          onReload={load}
+          setError={setError}
+          onAddNewHorse={() => setSelected({ newForPaddock: null, slot: 0 })}
+        />
+      )}
+
+      {!loading && mode === "weide" && (
         <div style={styles.list}>
           {rows.map((row) =>
             row.type === "heading" ? (
@@ -334,6 +354,10 @@ export default function App() {
         </div>
       )}
 
+      {!loading && mode === "fuehranlage" && (
+        <FuehranlageView horses={horses} onCellClick={(id) => setSelected({ horseId: id })} onSaveComment={saveComment} />
+      )}
+
       {selected && (
         <DetailModal
           selected={selected}
@@ -343,8 +367,10 @@ export default function App() {
           unlockedIds={unlockedIds}
           setUnlockedIds={setUnlockedIds}
           freeSlotIn={freeSlotIn}
+          mode={mode}
           onClose={() => setSelected(null)}
           onSetStatus={setStatus}
+          onSetFuehranlage={setFuehranlageStatus}
           onSaveComment={saveComment}
           onMoveHorse={moveHorse}
           onDeleteHorse={deleteHorse}
@@ -357,6 +383,86 @@ export default function App() {
         Jedes Pferd ist mit einem Code gesperrt, den der Ersteller vergibt – das verhindert
         versehentliches Ändern durch andere. Admin kann alles ohne Code bearbeiten.
       </div>
+    </div>
+  );
+}
+
+function FuehranlageView({ horses, onCellClick, onSaveComment }) {
+  const sorted = [...horses].sort((a, b) => {
+    const ao = a.fuehranlage_order ?? 9999;
+    const bo = b.fuehranlage_order ?? 9999;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name, "de");
+  });
+
+  const jaHorses = sorted.filter((h) => h.fuehranlage_status === "ja");
+  const neinHorses = sorted.filter((h) => h.fuehranlage_status !== "ja");
+
+  // Feste Vierer-Plätze, immer nachgefüllt: sobald ein Pferd auf "nein"
+  // steht, rutscht das nächste Pferd in der Reihenfolge nach.
+  const groups = [];
+  for (let i = 0; i < jaHorses.length; i += 4) {
+    groups.push(jaHorses.slice(i, i + 4));
+  }
+
+  return (
+    <>
+      <div style={styles.filterBar}>
+        <span style={{ ...styles.chip, borderColor: "#4F7A3A", color: "#B7DFA3" }}>Ja · {jaHorses.length}</span>
+        <span style={{ ...styles.chip, borderColor: "#A5453D", color: "#E9B9B4" }}>
+          Nein · {neinHorses.length}
+        </span>
+      </div>
+
+      <div style={styles.list}>
+        {groups.length === 0 && (
+          <div style={styles.empty}>Noch keine Pferde für die Führanlage ausgewählt.</div>
+        )}
+        {groups.map((group, gi) => (
+          <div key={gi} style={styles.paddockBox}>
+            <div style={styles.slotsWrap}>
+              {group.map((h) => (
+                <FuehranlageCell key={h.id} horse={h} onClick={() => onCellClick(h.id)} onSaveComment={onSaveComment} />
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {neinHorses.length > 0 && (
+          <>
+            <div style={styles.sectionHeading}>Führanlage nein</div>
+            <div style={styles.paddockBox}>
+              <div style={styles.slotsWrap}>
+                {neinHorses.map((h) => (
+                  <FuehranlageCell key={h.id} horse={h} onClick={() => onCellClick(h.id)} onSaveComment={onSaveComment} />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function FuehranlageCell({ horse, onClick, onSaveComment }) {
+  const ja = horse.fuehranlage_status === "ja";
+  const border = ja ? "#4F7A3A" : "#A5453D";
+  const textColor = ja ? "#2C4620" : "#6E241E";
+  return (
+    <div style={{ ...styles.horseCell, background: ja ? "#B7DFA3" : "#E9B9B4", borderColor: border }}>
+      <button className="cell" onClick={onClick} style={styles.fuehranlageClickArea}>
+        <div style={styles.lockCorner}>🔒</div>
+        <div style={styles.horseCellOwner}>{horse.owner}</div>
+        <div style={{ ...styles.horseCellName, color: textColor }}>{horse.name}</div>
+        <div style={{ ...styles.horseCellStatus, color: textColor }}>{ja ? "Führanlage ja" : "Führanlage nein"}</div>
+      </button>
+      <input
+        style={styles.inlineCommentInput}
+        defaultValue={horse.comment || ""}
+        placeholder="Kommentar, z. B. Gamaschen"
+        onBlur={(e) => onSaveComment(horse.id, e.target.value.trim())}
+      />
     </div>
   );
 }
@@ -421,8 +527,10 @@ function DetailModal({
   unlockedIds,
   setUnlockedIds,
   freeSlotIn,
+  mode,
   onClose,
   onSetStatus,
+  onSetFuehranlage,
   onSaveComment,
   onMoveHorse,
   onDeleteHorse,
@@ -491,7 +599,15 @@ function DetailModal({
       {paddock && <div style={styles.modalPaddockInfo}>Weide {paddock.number}</div>}
 
       <div style={styles.modalStatusLabel}>
-        Status: <strong>{STATUS[horse.status].label}</strong>
+        {mode === "fuehranlage" ? (
+          <>
+            Führanlage: <strong>{horse.fuehranlage_status === "ja" ? "Ja" : "Nein"}</strong>
+          </>
+        ) : (
+          <>
+            Status: <strong>{STATUS[horse.status].label}</strong>
+          </>
+        )}
       </div>
       <div style={styles.modalTimestamp}>Zuletzt geändert {timeAgo(horse.updated_at)}</div>
 
@@ -517,40 +633,75 @@ function DetailModal({
 
       {unlocked && (
         <>
-          <label style={styles.modalLabel}>Status ändern</label>
-          <div style={styles.statusGrid}>
-            {STATUS_ORDER.map((key) => (
-              <button
-                key={key}
-                onClick={() => onSetStatus(horse.id, key)}
-                style={{ ...styles.statusBtn, ...(horse.status === key ? styles.statusBtnActive : {}) }}
-              >
-                {STATUS[key].short}
-              </button>
-            ))}
-          </div>
+          {mode === "fuehranlage" ? (
+            <>
+              <label style={styles.modalLabel}>Führanlage</label>
+              <div style={styles.statusGrid}>
+                <button
+                  onClick={() => onSetFuehranlage(horse.id, "ja")}
+                  style={{
+                    ...styles.statusBtn,
+                    ...(horse.fuehranlage_status === "ja"
+                      ? { background: "#4F7A3A", color: "#fff", borderColor: "#4F7A3A" }
+                      : {}),
+                  }}
+                >
+                  Führanlage ja
+                </button>
+                <button
+                  onClick={() => onSetFuehranlage(horse.id, "nein")}
+                  style={{
+                    ...styles.statusBtn,
+                    ...(horse.fuehranlage_status !== "ja"
+                      ? { background: "#A5453D", color: "#fff", borderColor: "#A5453D" }
+                      : {}),
+                  }}
+                >
+                  Führanlage nein
+                </button>
+              </div>
+              <div style={styles.modalTimestamp}>
+                Weide-Status bleibt im Hintergrund erhalten ({STATUS[horse.status].label}).
+              </div>
+            </>
+          ) : (
+            <>
+              <label style={styles.modalLabel}>Status ändern</label>
+              <div style={styles.statusGrid}>
+                {STATUS_ORDER.map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => onSetStatus(horse.id, key)}
+                    style={{ ...styles.statusBtn, ...(horse.status === key ? styles.statusBtnActive : {}) }}
+                  >
+                    {STATUS[key].short}
+                  </button>
+                ))}
+              </div>
 
-          <label style={styles.modalLabel}>Weide wechseln</label>
-          <div style={styles.moveRow}>
-            <select style={styles.modalInput} value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)}>
-              <option value="">– Weide wählen –</option>
-              {paddocks.map((p) => (
-                <option key={p.id} value={p.id} disabled={freeSlotIn(p.id) === null && p.id !== horse.paddock_id}>
-                  Weide {p.number} {freeSlotIn(p.id) === null && p.id !== horse.paddock_id ? "(voll)" : ""}
-                </option>
-              ))}
-            </select>
-            <button
-              style={styles.modalSecondaryBtn}
-              onClick={() => {
-                if (!moveTarget) return;
-                const slot = freeSlotIn(moveTarget);
-                if (slot !== null) onMoveHorse(horse.id, moveTarget, slot);
-              }}
-            >
-              Umziehen
-            </button>
-          </div>
+              <label style={styles.modalLabel}>Weide wechseln</label>
+              <div style={styles.moveRow}>
+                <select style={styles.modalInput} value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)}>
+                  <option value="">– Weide wählen –</option>
+                  {paddocks.map((p) => (
+                    <option key={p.id} value={p.id} disabled={freeSlotIn(p.id) === null && p.id !== horse.paddock_id}>
+                      Weide {p.number} {freeSlotIn(p.id) === null && p.id !== horse.paddock_id ? "(voll)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  style={styles.modalSecondaryBtn}
+                  onClick={() => {
+                    if (!moveTarget) return;
+                    const slot = freeSlotIn(moveTarget);
+                    if (slot !== null) onMoveHorse(horse.id, moveTarget, slot);
+                  }}
+                >
+                  Umziehen
+                </button>
+              </div>
+            </>
+          )}
 
           <label style={styles.modalLabel}>Kommentar (z. B. GM, FD, GL, FB)</label>
           <input
@@ -586,12 +737,25 @@ function ModalShell({ title, onClose, children }) {
   );
 }
 
-function AdminPanel({ paddocks, adminPinValue, onReload, setError }) {
+function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError, onAddNewHorse }) {
   const [newNumber, setNewNumber] = useState("");
   const [newSeason, setNewSeason] = useState("S");
   const [newSlots, setNewSlots] = useState(2);
   const [newColumn, setNewColumn] = useState("left");
   const [newAdminPin, setNewAdminPin] = useState(adminPinValue || "");
+
+  async function setGlobalMode(newMode) {
+    const { error: err } = await supabase.from("app_settings").update({ mode: newMode }).eq("id", 1);
+    if (err) setError("Modus ändern fehlgeschlagen: " + err.message);
+    onReload();
+  }
+
+  async function updateHorseOrder(id, value) {
+    const num = value.trim() === "" ? null : Number(value);
+    const { error: err } = await supabase.from("horses").update({ fuehranlage_order: num }).eq("id", id);
+    if (err) setError("Speichern fehlgeschlagen: " + err.message);
+    onReload();
+  }
 
   async function addPaddock() {
     if (!newNumber.trim()) return;
@@ -629,6 +793,46 @@ function AdminPanel({ paddocks, adminPinValue, onReload, setError }) {
 
   return (
     <div style={styles.adminPanel}>
+      <div style={styles.adminPanelTitle}>Betriebsmodus</div>
+      <div style={styles.adminAddRow}>
+        <button
+          style={mode === "weide" ? styles.modeBtnActive : styles.modeBtn}
+          onClick={() => setGlobalMode("weide")}
+        >
+          🌿 Weidebetrieb
+        </button>
+        <button
+          style={mode === "fuehranlage" ? styles.modeBtnActive : styles.modeBtn}
+          onClick={() => setGlobalMode("fuehranlage")}
+        >
+          🌀 Führanlagenbetrieb
+        </button>
+      </div>
+      <div style={styles.adminHint}>Gilt sofort für alle – bei Regen einfach umschalten.</div>
+
+      <div style={styles.adminPanelTitle}>Führanlagen-Reihenfolge</div>
+      <div style={styles.adminHint}>Zahl = Position in der Führanlagen-Liste (leer = alphabetisch am Ende).</div>
+      <button style={{ ...styles.modalSecondaryBtn, marginBottom: 8 }} onClick={onAddNewHorse}>
+        + Neues Pferd eintragen
+      </button>
+      <div style={styles.adminPaddockList}>
+        {[...horses]
+          .sort((a, b) => (a.fuehranlage_order ?? 9999) - (b.fuehranlage_order ?? 9999))
+          .map((h) => (
+            <div key={h.id} style={styles.adminPaddockRow}>
+              <input
+                style={{ ...styles.adminMiniInput, width: 44 }}
+                type="number"
+                defaultValue={h.fuehranlage_order ?? ""}
+                onBlur={(e) => updateHorseOrder(h.id, e.target.value)}
+              />
+              <span style={{ fontSize: 11.5, flex: 1 }}>
+                {h.name} ({h.owner})
+              </span>
+            </div>
+          ))}
+      </div>
+
       <div style={styles.adminPanelTitle}>Weiden verwalten</div>
       <div style={styles.adminPaddockList}>
         {paddocks.map((p) => (
@@ -763,6 +967,34 @@ const styles = {
     color: "#EFE8D8",
   },
   chipActive: { background: "#EFE8D8", color: "#26332A", borderColor: "#EFE8D8" },
+  modeBanner: {
+    margin: "12px 0",
+    padding: "9px 12px",
+    background: "#3A3F26",
+    border: "1px solid #6B6E3E",
+    borderRadius: 8,
+    fontSize: 12,
+    color: "#E5DFC0",
+  },
+  modeBtn: {
+    background: "transparent",
+    border: "1.5px solid #5C6E5E",
+    color: "#EFE8D8",
+    borderRadius: 6,
+    padding: "8px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  modeBtnActive: {
+    background: "#C9A227",
+    border: "1.5px solid #C9A227",
+    color: "#26332A",
+    borderRadius: 6,
+    padding: "8px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  adminHint: { fontSize: 10.5, color: "#9CB09E", marginTop: 4, marginBottom: 4 },
   list: { display: "flex", flexDirection: "column", gap: 10 },
   rowWrap: { display: "flex", gap: 14, alignItems: "flex-start" },
   spacerBox: { flex: 1, minWidth: 0 },
@@ -803,6 +1035,25 @@ const styles = {
     wordBreak: "break-word",
   },
   lockCorner: { position: "absolute", top: 6, right: 7, fontSize: 10, opacity: 0.55 },
+  fuehranlageClickArea: {
+    width: "100%",
+    textAlign: "left",
+    background: "transparent",
+    border: "none",
+    padding: 0,
+    position: "relative",
+    display: "block",
+  },
+  inlineCommentInput: {
+    width: "100%",
+    marginTop: 7,
+    padding: "6px 8px",
+    borderRadius: 5,
+    border: "1px solid rgba(0,0,0,0.15)",
+    background: "rgba(255,255,255,0.65)",
+    fontSize: 11,
+    color: "#3A362C",
+  },
   emptySlot: {
     width: "100%",
     border: "1.5px dashed #4A5D4D",
