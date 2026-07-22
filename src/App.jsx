@@ -821,4 +821,434 @@ function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError,
       <div style={styles.adminAddRow}>
         <button
           style={mode === "weide" ? styles.modeBtnActive : styles.modeBtn}
-          onClick={() =
+          onClick={() => setGlobalMode("weide")}
+        >
+          🌿 Weidebetrieb
+        </button>
+        <button
+          style={mode === "fuehranlage" ? styles.modeBtnActive : styles.modeBtn}
+          onClick={() => setGlobalMode("fuehranlage")}
+        >
+          🌀 Führanlagenbetrieb
+        </button>
+      </div>
+      <div style={styles.adminHint}>Gilt sofort für alle – bei Regen einfach umschalten.</div>
+
+      <div style={styles.adminPanelTitle}>Führanlagen-Reihenfolge</div>
+      <div style={styles.adminHint}>Pfeile zum Umsortieren – nach jeweils 4 Pferden eine Trennlinie (= eine Runde).</div>
+      <button style={{ ...styles.modalSecondaryBtn, marginBottom: 8 }} onClick={onAddNewHorse}>
+        + Neues Pferd eintragen
+      </button>
+      <div style={styles.adminPaddockList}>
+        {sortedForOrder.map((h, i) => (
+          <div key={h.id}>
+            <div style={styles.adminOrderRow}>
+              <input
+                style={styles.orderNumberInput}
+                type="number"
+                defaultValue={h.fuehranlage_order ?? i + 1}
+                onBlur={(e) => updateHorseOrder(h.id, e.target.value)}
+              />
+              <div style={styles.orderArrows}>
+                <button
+                  style={{ ...styles.arrowBtnBig, opacity: i === 0 ? 0.35 : 1 }}
+                  onClick={() => swapOrder(i, -1)}
+                  disabled={i === 0}
+                >
+                  ▲
+                </button>
+                <button
+                  style={{ ...styles.arrowBtnBig, opacity: i === sortedForOrder.length - 1 ? 0.35 : 1 }}
+                  onClick={() => swapOrder(i, 1)}
+                  disabled={i === sortedForOrder.length - 1}
+                >
+                  ▼
+                </button>
+              </div>
+              <span style={styles.adminOrderLabel}>
+                {h.name} ({h.owner})
+              </span>
+            </div>
+            {(i + 1) % 4 === 0 && i !== sortedForOrder.length - 1 && <div style={styles.orderDivider} />}
+          </div>
+        ))}
+      </div>
+
+      <div style={styles.adminPanelTitle}>Weiden verwalten</div>
+      <div style={styles.adminPaddockList}>
+        {paddocks.map((p) => (
+          <div key={p.id} style={styles.adminPaddockRow}>
+            <input
+              style={styles.adminMiniInput}
+              defaultValue={p.number}
+              onBlur={(e) => updatePaddockField(p.id, "number", e.target.value)}
+            />
+            <select
+              style={styles.adminMiniInput}
+              defaultValue={p.season || ""}
+              onChange={(e) => updatePaddockField(p.id, "season", e.target.value)}
+            >
+              <option value="S">S</option>
+              <option value="W">W</option>
+            </select>
+            <select
+              style={styles.adminMiniInput}
+              defaultValue={p.column || "left"}
+              onChange={(e) => updatePaddockField(p.id, "column", e.target.value)}
+            >
+              <option value="left">links</option>
+              <option value="right">rechts</option>
+            </select>
+            <input
+              style={{ ...styles.adminMiniInput, flex: 1 }}
+              defaultValue={p.note || ""}
+              placeholder="Notiz"
+              onBlur={(e) => updatePaddockField(p.id, "note", e.target.value)}
+            />
+            <button style={styles.adminDeleteBtn} onClick={() => deletePaddock(p.id)}>
+              🗑
+            </button>
+          </div>
+        ))}
+      </div>
+      <div style={styles.adminAddRow}>
+        <input
+          style={styles.adminMiniInput}
+          placeholder="Nr."
+          value={newNumber}
+          onChange={(e) => setNewNumber(e.target.value)}
+        />
+        <select style={styles.adminMiniInput} value={newSeason} onChange={(e) => setNewSeason(e.target.value)}>
+          <option value="S">S</option>
+          <option value="W">W</option>
+        </select>
+        <input
+          style={styles.adminMiniInput}
+          type="number"
+          min="1"
+          max="6"
+          value={newSlots}
+          onChange={(e) => setNewSlots(e.target.value)}
+        />
+        <select style={styles.adminMiniInput} value={newColumn} onChange={(e) => setNewColumn(e.target.value)}>
+          <option value="left">links</option>
+          <option value="right">rechts</option>
+        </select>
+        <button style={styles.modalSecondaryBtn} onClick={addPaddock}>
+          + Weide
+        </button>
+      </div>
+
+      <div style={styles.adminPanelTitle}>Admin-Code ändern</div>
+      <div style={styles.adminAddRow}>
+        <input style={styles.adminMiniInput} value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} />
+        <button style={styles.modalSecondaryBtn} onClick={saveAdminPin}>
+          Speichern
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#26332A",
+    padding: "24px 14px 60px",
+    fontFamily: "'IBM Plex Mono', monospace",
+    color: "#EFE8D8",
+  },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 4 },
+  headerBtns: { display: "flex", gap: 8 },
+  eyebrow: { fontSize: 11, letterSpacing: "0.18em", color: "#C9A227", marginBottom: 4 },
+  title: {
+    fontFamily: "'Fraunces', serif",
+    fontWeight: 600,
+    fontSize: "clamp(24px, 6vw, 34px)",
+    margin: 0,
+    color: "#F7F3E8",
+  },
+  refreshNote: { fontSize: 10.5, color: "#8FAF8A", marginTop: 4 },
+  adminBtn: {
+    background: "transparent",
+    color: "#C9A227",
+    border: "1.5px solid #C9A227",
+    borderRadius: 8,
+    padding: "8px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  adminActiveBtn: {
+    background: "#C9A227",
+    color: "#26332A",
+    border: "none",
+    borderRadius: 8,
+    padding: "8px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  adminLoginBox: { display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" },
+  errorBanner: {
+    margin: "14px 0 0",
+    background: "#4A2E2E",
+    color: "#F2C6C6",
+    padding: "10px 14px",
+    borderRadius: 6,
+    fontSize: 12.5,
+  },
+  empty: { margin: "30px 0", textAlign: "center", color: "#A9B7A9", fontSize: 13 },
+  filterBar: { display: "flex", gap: 6, flexWrap: "wrap", margin: "16px 0" },
+  chip: {
+    border: "1.5px solid #5C6E5E",
+    borderRadius: 999,
+    padding: "5px 11px",
+    fontSize: 11.5,
+    fontWeight: 600,
+    background: "transparent",
+    color: "#EFE8D8",
+  },
+  chipActive: { background: "#EFE8D8", color: "#26332A", borderColor: "#EFE8D8" },
+  modeBanner: {
+    margin: "12px 0",
+    padding: "9px 12px",
+    background: "#3A3F26",
+    border: "1px solid #6B6E3E",
+    borderRadius: 8,
+    fontSize: 12,
+    color: "#E5DFC0",
+  },
+  modeBtn: {
+    background: "transparent",
+    border: "1.5px solid #5C6E5E",
+    color: "#EFE8D8",
+    borderRadius: 6,
+    padding: "8px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  modeBtnActive: {
+    background: "#C9A227",
+    border: "1.5px solid #C9A227",
+    color: "#26332A",
+    borderRadius: 6,
+    padding: "8px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  adminHint: { fontSize: 10.5, color: "#9CB09E", marginTop: 4, marginBottom: 4 },
+  list: { display: "flex", flexDirection: "column", gap: 10 },
+  rowWrap: { display: "flex", gap: 14, alignItems: "flex-start" },
+  spacerBox: { flex: 1, minWidth: 0 },
+  sectionHeading: {
+    fontFamily: "'Fraunces', serif",
+    fontWeight: 600,
+    fontSize: 15,
+    color: "#C9A227",
+    marginTop: 14,
+    marginBottom: 2,
+  },
+  paddockBox: { flex: 1, minWidth: 0, background: "#2E3D31", border: "1px solid #3E4F41", borderRadius: 10, padding: "8px 8px 6px" },
+  paddockMeta: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6, paddingLeft: 2 },
+  paddockNumber: { fontSize: 16, fontWeight: 800, color: "#EFE8D8" },
+  seasonBadge: { fontSize: 9.5, fontWeight: 700, color: "#26332A", background: "#9CB09E", borderRadius: 4, padding: "1px 5px" },
+  paddockNote: { fontSize: 10.5, color: "#D9A05B", marginTop: 6, paddingLeft: 2 },
+  slotsWrap: { display: "flex", flexDirection: "column", gap: 6 },
+  horseCell: {
+    width: "100%",
+    textAlign: "left",
+    border: "1.5px solid",
+    borderRadius: 8,
+    padding: "8px 9px",
+    position: "relative",
+  },
+  horseCellOwner: { fontSize: 10, color: "#6B675B" },
+  horseCellName: { fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 15.5, lineHeight: 1.2 },
+  horseCellStatus: { fontSize: 10, fontWeight: 600, marginTop: 2, color: "#8A4E1C" },
+  horseCellComment: {
+    fontSize: 10.5,
+    marginTop: 5,
+    padding: "2px 6px",
+    background: "rgba(255,255,255,0.55)",
+    borderRadius: 4,
+    color: "#B23B3B",
+    fontWeight: 600,
+    display: "inline-block",
+    wordBreak: "break-word",
+  },
+  lockCorner: { position: "absolute", top: 6, right: 7, fontSize: 10, opacity: 0.55 },
+  fuehranlageClickArea: {
+    width: "100%",
+    textAlign: "left",
+    background: "transparent",
+    border: "none",
+    padding: 0,
+    position: "relative",
+    display: "block",
+  },
+  inlineCommentInput: {
+    width: "100%",
+    marginTop: 7,
+    padding: "6px 8px",
+    borderRadius: 5,
+    border: "1px solid rgba(0,0,0,0.15)",
+    background: "rgba(255,255,255,0.65)",
+    fontSize: 11,
+    color: "#3A362C",
+  },
+  fuehranlageCell: {
+    width: "100%",
+    border: "1.5px solid",
+    borderRadius: 7,
+    padding: "6px 8px",
+    position: "relative",
+  },
+  fuehranlageRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, paddingRight: 16 },
+  fuehranlageName: { fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 13.5 },
+  fuehranlageOwner: { fontSize: 9.5, color: "#4A4638" },
+  fuehranlageStatusSmall: { fontSize: 9, fontWeight: 600, marginTop: 1 },
+  lockCornerSmall: { position: "absolute", top: 5, right: 6, fontSize: 9, opacity: 0.5 },
+  inlineCommentInputSmall: {
+    width: "100%",
+    marginTop: 4,
+    padding: "4px 6px",
+    borderRadius: 4,
+    border: "1px solid rgba(0,0,0,0.15)",
+    background: "rgba(255,255,255,0.65)",
+    fontSize: 10,
+    color: "#3A362C",
+  },
+  emptySlot: {
+    width: "100%",
+    border: "1.5px dashed #4A5D4D",
+    borderRadius: 8,
+    padding: "8px 9px",
+    background: "transparent",
+    color: "#7C8C7E",
+    fontSize: 12,
+  },
+  footnote: { textAlign: "center", fontSize: 11, color: "#8A9A8C", marginTop: 26 },
+
+  adminPanel: { background: "#2E3D31", border: "1px solid #3E4F41", borderRadius: 10, padding: 12, marginBottom: 14 },
+  adminPanelTitle: { fontFamily: "'Fraunces', serif", fontSize: 15, color: "#F7F3E8", marginBottom: 8, marginTop: 10 },
+  adminPaddockList: { display: "flex", flexDirection: "column", gap: 5 },
+  adminPaddockRow: { display: "flex", gap: 5, alignItems: "center" },
+  adminMiniInput: {
+    padding: "5px 7px",
+    borderRadius: 5,
+    border: "1px solid #4A5D4D",
+    background: "#26332A",
+    color: "#F7F3E8",
+    fontSize: 11.5,
+    width: 52,
+  },
+  adminDeleteBtn: { background: "none", border: "none", color: "#C97A7A", fontSize: 13, padding: 4 },
+  adminAddRow: { display: "flex", gap: 6, marginTop: 8, alignItems: "center" },
+  adminOrderRow: { display: "flex", gap: 8, alignItems: "center", padding: "4px 0" },
+  orderNumberInput: {
+    width: 40,
+    padding: "6px 4px",
+    borderRadius: 5,
+    border: "1px solid #4A5D4D",
+    background: "#26332A",
+    color: "#F7F3E8",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  orderArrows: { display: "flex", flexDirection: "column", gap: 3 },
+  arrowBtn: {
+    background: "#26332A",
+    color: "#EFE8D8",
+    border: "1px solid #4A5D4D",
+    borderRadius: 4,
+    width: 22,
+    height: 18,
+    fontSize: 10,
+    lineHeight: 1,
+    padding: 0,
+  },
+  arrowBtnBig: {
+    background: "#26332A",
+    color: "#EFE8D8",
+    border: "1px solid #4A5D4D",
+    borderRadius: 5,
+    width: 34,
+    height: 28,
+    fontSize: 14,
+    lineHeight: 1,
+    padding: 0,
+  },
+  adminOrderLabel: { fontSize: 12, flex: 1 },
+  orderDivider: { borderTop: "1px dashed #4A5D4D", margin: "6px 0" },
+
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(10, 14, 10, 0.6)",
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    zIndex: 50,
+  },
+  modalBox: {
+    background: "#F7F3E8",
+    color: "#2A2A24",
+    width: "100%",
+    maxWidth: 480,
+    maxHeight: "88vh",
+    overflowY: "auto",
+    borderRadius: "16px 16px 0 0",
+    padding: "18px 20px 28px",
+    fontFamily: "'IBM Plex Mono', monospace",
+  },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  modalTitle: { fontFamily: "'Fraunces', serif", fontSize: 24, margin: 0 },
+  modalCloseBtn: { background: "none", border: "none", fontSize: 24, color: "#8A857A", lineHeight: 1 },
+  modalOwner: { fontSize: 13, color: "#7A7568", marginBottom: 10 },
+  modalPaddockInfo: { fontSize: 12, color: "#6B8F58", fontWeight: 600, marginBottom: 6 },
+  modalStatusLabel: { fontSize: 13, marginBottom: 4 },
+  modalTimestamp: { fontSize: 11, color: "#9A9482", marginBottom: 14 },
+  modalLabel: { display: "block", fontSize: 11.5, fontWeight: 600, color: "#7A7568", marginTop: 14, marginBottom: 6 },
+  modalInput: { width: "100%", padding: "9px 10px", borderRadius: 6, border: "1px solid #DCD4C2", background: "#fff", fontSize: 13 },
+  modalPrimaryBtn: {
+    marginTop: 18,
+    width: "100%",
+    background: "#6B8F58",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: "12px",
+    fontSize: 14,
+    fontWeight: 600,
+  },
+  modalSecondaryBtn: {
+    background: "#26332A",
+    color: "#EFE8D8",
+    border: "none",
+    borderRadius: 6,
+    padding: "9px 12px",
+    fontSize: 12.5,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  },
+  statusGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 },
+  statusBtn: { border: "1.5px solid #C9BFA9", borderRadius: 6, padding: "9px 6px", fontSize: 12, fontWeight: 600, background: "#fff", color: "#4A4638" },
+  statusBtnActive: { background: "#26332A", color: "#EFE8D8", borderColor: "#26332A" },
+  moveRow: { display: "flex", gap: 6 },
+  lockBox: { background: "#EFEAE0", border: "1px dashed #C9BFA9", borderRadius: 8, padding: "12px", marginTop: 14 },
+  lockLabel: { fontSize: 12, fontWeight: 600, color: "#7A7568", marginBottom: 8 },
+  lockRow: { display: "flex", gap: 6 },
+  pinInput: { flex: 1, minWidth: 0, padding: "8px 9px", borderRadius: 6, border: "1px solid #C9BFA9", fontSize: 13, background: "#fff", color: "#2A2A24" },
+  unlockBtn: { background: "#26332A", color: "#EFE8D8", border: "none", borderRadius: 6, padding: "8px 12px", fontSize: 12, fontWeight: 600 },
+  pinError: { marginTop: 6, fontSize: 11, color: "#B23B3B" },
+  deleteBtn: {
+    marginTop: 20,
+    width: "100%",
+    background: "transparent",
+    border: "1.5px solid #B23B3B",
+    color: "#B23B3B",
+    borderRadius: 8,
+    padding: "10px",
+    fontSize: 12.5,
+    fontWeight: 600,
+  },
+};
