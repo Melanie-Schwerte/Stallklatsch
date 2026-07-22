@@ -136,21 +136,31 @@ export default function App() {
     const { error: err } = await supabase.from("horses").delete().eq("id", id);
     if (err) setError("Entfernen fehlgeschlagen: " + err.message);
     setSelected(null);
+    load();
   }
 
   async function addHorse({ name, owner, pin, paddockId, slotIndex }) {
-    const { error: err } = await supabase.from("horses").insert({
-      name,
-      owner,
-      pin,
-      status: "weide_normal",
-      comment: "",
-      paddock_id: paddockId || null,
-      slot_index: slotIndex,
-      updated_at: new Date().toISOString(),
-    });
-    if (err) setError("Eintragen fehlgeschlagen: " + err.message);
+    const { data, error: err } = await supabase
+      .from("horses")
+      .insert({
+        name,
+        owner,
+        pin,
+        status: "weide_normal",
+        comment: "",
+        paddock_id: paddockId || null,
+        slot_index: slotIndex,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    if (err) {
+      setError("Eintragen fehlgeschlagen: " + err.message);
+    } else if (data) {
+      setHorses((prev) => [...prev, data]);
+    }
     setSelected(null);
+    load();
   }
 
   function freeSlotIn(paddockId) {
