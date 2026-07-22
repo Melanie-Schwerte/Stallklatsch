@@ -488,4 +488,337 @@ function PaddockBox({ paddock, horsesInSlot, filterBucket, onCellClick }) {
           h ? (
             <HorseCell key={h.id} horse={h} filterBucket={filterBucket} onClick={() => onCellClick(i, h)} />
           ) : (
-            <button key={i} style={styles.emptySlot} onClick={() => onCellClick
+            <button key={i} style={styles.emptySlot} onClick={() => onCellClick(i, null)}>
+              + Pferd
+            </button>
+          )
+        )}
+      </div>
+      {paddock.note && <div style={styles.paddockNote}>{paddock.note}</div>}
+    </div>
+  );
+}
+
+function HorseCell({ horse, filterBucket, onClick }) {
+  const bucket = bucketOf(horse.status);
+  const b = BUCKET[bucket];
+  const dimmed = filterBucket && filterBucket !== bucket;
+  return (
+    <button
+      className="cell"
+      onClick={onClick}
+      style={{
+        ...styles.horseCell,
+        background: b.bg,
+        borderColor: b.border,
+        opacity: dimmed ? 0.35 : 1,
+      }}
+    >
+      <div style={styles.lockCorner}>🔒</div>
+      <div style={styles.horseCellOwner}>{horse.owner}</div>
+      <div style={{ ...styles.horseCellName, color: b.text }}>{horse.name}</div>
+      {bucket === "halb" && <div style={styles.horseCellStatus}>{STATUS[horse.status].short}</div>}
+      {horse.comment && <div style={styles.horseCellComment}>{horse.comment}</div>}
+    </button>
+  );
+}
+
+function DetailModal({
+  selected,
+  horses,
+  paddocks,
+  adminUnlocked,
+  unlockedIds,
+  setUnlockedIds,
+  freeSlotIn,
+  mode,
+  onClose,
+  onSetStatus,
+  onSetFuehranlage,
+  onSaveComment,
+  onMoveHorse,
+  onDeleteHorse,
+  onAddHorse,
+  timeAgo,
+}) {
+  const horse = selected.horseId ? horses.find((h) => h.id === selected.horseId) : null;
+
+  const [pinDraft, setPinDraft] = useState("");
+  const [pinError, setPinError] = useState(null);
+  const [commentDraft, setCommentDraft] = useState(horse?.comment || "");
+  const [moveTarget, setMoveTarget] = useState("");
+
+  const [newName, setNewName] = useState("");
+  const [newOwner, setNewOwner] = useState("");
+  const [newPin, setNewPin] = useState("");
+
+  const unlocked = adminUnlocked || (horse && unlockedIds.has(horse.id));
+
+  function tryUnlock() {
+    if (horse && pinDraft.trim() === horse.pin) {
+      setUnlockedIds((prev) => new Set(prev).add(horse.id));
+      setPinError(null);
+    } else {
+      setPinError("Code stimmt nicht.");
+    }
+  }
+
+  if (!horse && selected.newForPaddock !== undefined) {
+    const paddock = paddocks.find((p) => p.id === selected.newForPaddock);
+    return (
+      <ModalShell onClose={onClose} title={paddock ? `Neues Pferd – Weide ${paddock.number}` : "Neues Pferd"}>
+        <label style={styles.modalLabel}>Name des Pferdes</label>
+        <input style={styles.modalInput} value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+        <label style={styles.modalLabel}>Besitzer</label>
+        <input style={styles.modalInput} value={newOwner} onChange={(e) => setNewOwner(e.target.value)} />
+        <label style={styles.modalLabel}>Code (zum späteren Ändern nötig)</label>
+        <input style={styles.modalInput} value={newPin} onChange={(e) => setNewPin(e.target.value)} />
+        <button
+          style={styles.modalPrimaryBtn}
+          onClick={() =>
+            newName.trim() &&
+            newPin.trim() &&
+            onAddHorse({
+              name: newName.trim(),
+              owner: newOwner.trim(),
+              pin: newPin.trim(),
+              paddockId: selected.newForPaddock,
+              slotIndex: selected.slot,
+            })
+          }
+        >
+          Eintragen
+        </button>
+      </ModalShell>
+    );
+  }
+
+  if (!horse) return null;
+
+  const paddock = paddocks.find((p) => p.id === horse.paddock_id);
+
+  return (
+    <ModalShell onClose={onClose} title={horse.name}>
+      <div style={styles.modalOwner}>{horse.owner}</div>
+      {paddock && <div style={styles.modalPaddockInfo}>Weide {paddock.number}</div>}
+
+      <div style={styles.modalStatusLabel}>
+        {mode === "fuehranlage" ? (
+          <>
+            Führanlage: <strong>{horse.fuehranlage_status === "ja" ? "Ja" : "Nein"}</strong>
+          </>
+        ) : (
+          <>
+            Status: <strong>{STATUS[horse.status].label}</strong>
+          </>
+        )}
+      </div>
+      <div style={styles.modalTimestamp}>Zuletzt geändert {timeAgo(horse.updated_at)}</div>
+
+      {!unlocked && (
+        <div style={styles.lockBox}>
+          <div style={styles.lockLabel}>🔒 Gesperrt – Code eingeben, um zu ändern</div>
+          <div style={styles.lockRow}>
+            <input
+              style={styles.pinInput}
+              type="password"
+              placeholder="Code"
+              value={pinDraft}
+              onChange={(e) => setPinDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && tryUnlock()}
+            />
+            <button style={styles.unlockBtn} onClick={tryUnlock}>
+              Entsperren
+            </button>
+          </div>
+          {pinError && <div style={styles.pinError}>{pinError}</div>}
+        </div>
+      )}
+
+      {unlocked && (
+        <>
+          {mode === "fuehranlage" ? (
+            <>
+              <label style={styles.modalLabel}>Führanlage</label>
+              <div style={styles.statusGrid}>
+                <button
+                  onClick={() => onSetFuehranlage(horse.id, "ja")}
+                  style={{
+                    ...styles.statusBtn,
+                    ...(horse.fuehranlage_status === "ja"
+                      ? { background: "#4F7A3A", color: "#fff", borderColor: "#4F7A3A" }
+                      : {}),
+                  }}
+                >
+                  Führanlage ja
+                </button>
+                <button
+                  onClick={() => onSetFuehranlage(horse.id, "nein")}
+                  style={{
+                    ...styles.statusBtn,
+                    ...(horse.fuehranlage_status !== "ja"
+                      ? { background: "#A5453D", color: "#fff", borderColor: "#A5453D" }
+                      : {}),
+                  }}
+                >
+                  Führanlage nein
+                </button>
+              </div>
+              <div style={styles.modalTimestamp}>
+                Weide-Status bleibt im Hintergrund erhalten ({STATUS[horse.status].label}).
+              </div>
+            </>
+          ) : (
+            <>
+              <label style={styles.modalLabel}>Status ändern</label>
+              <div style={styles.statusGrid}>
+                {STATUS_ORDER.map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => onSetStatus(horse.id, key)}
+                    style={{ ...styles.statusBtn, ...(horse.status === key ? styles.statusBtnActive : {}) }}
+                  >
+                    {STATUS[key].short}
+                  </button>
+                ))}
+              </div>
+
+              <label style={styles.modalLabel}>Weide wechseln</label>
+              <div style={styles.moveRow}>
+                <select style={styles.modalInput} value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)}>
+                  <option value="">– Weide wählen –</option>
+                  {paddocks.map((p) => (
+                    <option key={p.id} value={p.id} disabled={freeSlotIn(p.id) === null && p.id !== horse.paddock_id}>
+                      Weide {p.number} {freeSlotIn(p.id) === null && p.id !== horse.paddock_id ? "(voll)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  style={styles.modalSecondaryBtn}
+                  onClick={() => {
+                    if (!moveTarget) return;
+                    const slot = freeSlotIn(moveTarget);
+                    if (slot !== null) onMoveHorse(horse.id, moveTarget, slot);
+                  }}
+                >
+                  Umziehen
+                </button>
+              </div>
+            </>
+          )}
+
+          <label style={styles.modalLabel}>Kommentar (z. B. GM, FD, GL, FB)</label>
+          <input
+            style={styles.modalInput}
+            value={commentDraft}
+            onChange={(e) => setCommentDraft(e.target.value)}
+            onBlur={() => onSaveComment(horse.id, commentDraft.trim())}
+            placeholder="Platz für Kommentar, falls nötig"
+          />
+
+          <button style={styles.deleteBtn} onClick={() => onDeleteHorse(horse.id)}>
+            Pferd entfernen
+          </button>
+        </>
+      )}
+    </ModalShell>
+  );
+}
+
+function ModalShell({ title, onClose, children }) {
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <h3 style={styles.modalTitle}>{title}</h3>
+          <button style={styles.modalCloseBtn} onClick={onClose}>
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError, onAddNewHorse }) {
+  const [newNumber, setNewNumber] = useState("");
+  const [newSeason, setNewSeason] = useState("S");
+  const [newSlots, setNewSlots] = useState(2);
+  const [newColumn, setNewColumn] = useState("left");
+  const [newAdminPin, setNewAdminPin] = useState(adminPinValue || "");
+
+  async function setGlobalMode(newMode) {
+    const { error: err } = await supabase.from("app_settings").update({ mode: newMode }).eq("id", 1);
+    if (err) setError("Modus ändern fehlgeschlagen: " + err.message);
+    onReload();
+  }
+
+  const sortedForOrder = [...horses].sort((a, b) => {
+    const ao = a.fuehranlage_order ?? 9999;
+    const bo = b.fuehranlage_order ?? 9999;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name, "de");
+  });
+
+  async function updateHorseOrder(id, value) {
+    const num = value.trim() === "" ? null : Number(value);
+    const { error: err } = await supabase.from("horses").update({ fuehranlage_order: num }).eq("id", id);
+    if (err) setError("Speichern fehlgeschlagen: " + err.message);
+    onReload();
+  }
+
+  async function swapOrder(index, direction) {
+    const otherIndex = index + direction;
+    if (otherIndex < 0 || otherIndex >= sortedForOrder.length) return;
+    const a = sortedForOrder[index];
+    const b = sortedForOrder[otherIndex];
+    const aOrder = a.fuehranlage_order ?? index + 1;
+    const bOrder = b.fuehranlage_order ?? otherIndex + 1;
+    const { error: err1 } = await supabase.from("horses").update({ fuehranlage_order: bOrder }).eq("id", a.id);
+    const { error: err2 } = await supabase.from("horses").update({ fuehranlage_order: aOrder }).eq("id", b.id);
+    if (err1 || err2) setError("Verschieben fehlgeschlagen: " + (err1?.message || err2?.message));
+    onReload();
+  }
+
+  async function addPaddock() {
+    if (!newNumber.trim()) return;
+    const maxOrder = paddocks.reduce((m, p) => Math.max(m, p.order_index), 0);
+    const { error: err } = await supabase.from("paddocks").insert({
+      number: newNumber.trim(),
+      season: newSeason,
+      slot_count: Number(newSlots) || 2,
+      order_index: maxOrder + 1,
+      section: "main",
+      column: newColumn,
+    });
+    if (err) setError("Weide anlegen fehlgeschlagen: " + err.message);
+    setNewNumber("");
+    onReload();
+  }
+
+  async function updatePaddockField(id, field, value) {
+    const { error: err } = await supabase.from("paddocks").update({ [field]: value }).eq("id", id);
+    if (err) setError("Speichern fehlgeschlagen: " + err.message);
+  }
+
+  async function deletePaddock(id) {
+    const { error: err } = await supabase.from("paddocks").delete().eq("id", id);
+    if (err) setError("Löschen fehlgeschlagen: " + err.message);
+    onReload();
+  }
+
+  async function saveAdminPin() {
+    if (!newAdminPin.trim()) return;
+    const { error: err } = await supabase.from("app_settings").update({ admin_pin: newAdminPin.trim() }).eq("id", 1);
+    if (err) setError("Admin-Code ändern fehlgeschlagen: " + err.message);
+    onReload();
+  }
+
+  return (
+    <div style={styles.adminPanel}>
+      <div style={styles.adminPanelTitle}>Betriebsmodus</div>
+      <div style={styles.adminAddRow}>
+        <button
+          style={mode === "weide" ? styles.modeBtnActive : styles.modeBtn}
+          onClick={() =
