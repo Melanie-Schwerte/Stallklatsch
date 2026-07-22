@@ -311,6 +311,7 @@ export default function App() {
           onReload={load}
           setError={setError}
           onAddNewHorse={() => setSelected({ newForPaddock: null, slot: 0 })}
+          onDeleteHorseFully={deleteHorse}
         />
       )}
 
@@ -737,15 +738,20 @@ function DetailModal({
           />
 
           {mode === "fuehranlage" ? (
-            <button
-              style={styles.deleteBtn}
-              onClick={() => {
-                onSetFuehranlageActive(horse.id, false);
-                onClose();
-              }}
-            >
-              Aus Führanlagen-Liste entfernen
-            </button>
+            <>
+              <button
+                style={styles.deleteBtn}
+                onClick={() => {
+                  onSetFuehranlageActive(horse.id, false);
+                  onClose();
+                }}
+              >
+                Aus Führanlagen-Liste entfernen (parken)
+              </button>
+              <button style={styles.deleteBtnStrong} onClick={() => onDeleteHorse(horse.id)}>
+                Pferd komplett löschen (auch von der Weide)
+              </button>
+            </>
           ) : (
             <button style={styles.deleteBtn} onClick={() => onDeleteHorse(horse.id)}>
               Pferd entfernen
@@ -773,7 +779,7 @@ function ModalShell({ title, onClose, children }) {
   );
 }
 
-function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError, onAddNewHorse }) {
+function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError, onAddNewHorse, onDeleteHorseFully }) {
   const [newNumber, setNewNumber] = useState("");
   const [newSeason, setNewSeason] = useState("S");
   const [newSlots, setNewSlots] = useState(2);
@@ -919,8 +925,11 @@ function AdminPanel({ paddocks, horses, adminPinValue, mode, onReload, setError,
               <span style={styles.adminOrderLabel}>
                 {h.name} ({h.owner})
               </span>
-              <button style={styles.adminDeleteBtn} title="Aus Führanlagen-Liste entfernen" onClick={() => setFuehranlageActive(h.id, false)}>
-                ✕
+              <button style={styles.adminDeleteBtn} title="Aus Führanlagen-Liste entfernen (parken)" onClick={() => setFuehranlageActive(h.id, false)}>
+                📥
+              </button>
+              <button style={styles.adminDeleteBtn} title="Pferd komplett löschen" onClick={() => onDeleteHorseFully(h.id)}>
+                🗑
               </button>
             </div>
             {(i + 1) % 4 === 0 && i !== sortedForOrder.length - 1 && <div style={styles.orderDivider} />}
@@ -1318,6 +1327,17 @@ const styles = {
     background: "transparent",
     border: "1.5px solid #B23B3B",
     color: "#B23B3B",
+    borderRadius: 8,
+    padding: "10px",
+    fontSize: 12.5,
+    fontWeight: 600,
+  },
+  deleteBtnStrong: {
+    marginTop: 8,
+    width: "100%",
+    background: "#B23B3B",
+    border: "1.5px solid #B23B3B",
+    color: "#fff",
     borderRadius: 8,
     padding: "10px",
     fontSize: 12.5,
